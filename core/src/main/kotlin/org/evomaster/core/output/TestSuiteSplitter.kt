@@ -121,9 +121,15 @@ object TestSuiteSplitter {
                 !ind.hasAnyPotentialFault()
                         &&
                         ind.evaluatedMainActions().all { ac ->
-                            //TODO generic per type
-                            val code = (ac.result as HttpWsCallResult).getStatusCode()
-                            (code != null && code < 400)
+                            val result = ac.result
+                            if (result !is HttpWsCallResult) {
+                                // non-HTTP problem types (e.g. MCP) have no HTTP status codes;
+                                // skip the HTTP-specific success check
+                                false
+                            } else {
+                                val code = result.getStatusCode()
+                                (code != null && code < 400)
+                            }
                         }
             }.toMutableList()
 

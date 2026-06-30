@@ -2,7 +2,7 @@ package org.evomaster.core.problem.mcp.service
 
 import com.google.inject.AbstractModule
 import com.google.inject.TypeLiteral
-import org.evomaster.core.output.service.NoTestCaseWriter
+import org.evomaster.core.output.service.McpTestCaseWriter
 import org.evomaster.core.output.service.TestCaseWriter
 import org.evomaster.core.problem.enterprise.service.EnterpriseSampler
 import org.evomaster.core.problem.mcp.McpIndividual
@@ -73,7 +73,7 @@ class McpBlackBoxModule(
         }
 
         bind(TestCaseWriter::class.java)
-            .to(NoTestCaseWriter::class.java)
+            .to(McpTestCaseWriter::class.java)
             .asEagerSingleton()
     }
 }
