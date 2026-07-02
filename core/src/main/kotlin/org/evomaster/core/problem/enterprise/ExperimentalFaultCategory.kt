@@ -76,6 +76,10 @@ enum class ExperimentalFaultCategory(
         "TODO"),
     //6xx: mobile
 
+    //7xx: MCP
+    MCP_TOOL_ERROR(970, "MCP Tool Error", "mcpToolError",
+        "An MCP tool-call returned isError=true"),
+
     ;
 
     override fun getCode(): Int {

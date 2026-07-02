@@ -100,9 +100,7 @@ class McpTestCaseWriter : ApiTestCaseWriter() {
             lines.add("assertFalse($resVarName[\"isError\"] as? Boolean ?: false)")
             lines.add("assertNotNull($resVarName[\"content\"])")
         } else {
-            lines.addSingleCommentLine("Server returned isError=true during search; replaying call anyway")
-            lines.addSingleCommentLine("assertFalse($resVarName[\"isError\"] as? Boolean ?: false)")
-            lines.add("assertNotNull($resVarName[\"content\"])")
+            lines.add("assertTrue($resVarName[\"isError\"] as? Boolean ?: false)")
         }
     }
 

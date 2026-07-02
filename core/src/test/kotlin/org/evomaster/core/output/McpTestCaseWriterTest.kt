@@ -81,13 +81,14 @@ class McpTestCaseWriterTest {
     }
 
     @Test
-    fun singleToolCallServerError_assertWrappedInComment() {
+    fun singleToolCallServerError_assertsTrueIsError() {
         val ei = buildToolCallEI("echo", "message" to "hello", isError = true)
         val code = generate(ei)
 
         assertTrue(code.contains("callMcp(BASE_URL, \"tools/call\""), "Expected callMcp call, got:\n$code")
-        assertTrue(code.contains("// Server returned isError=true"), "Expected error comment, got:\n$code")
-        assertTrue(code.contains("// assertFalse"), "Expected commented-out assertFalse, got:\n$code")
+        assertTrue(code.contains("assertTrue"), "Expected assertTrue for isError, got:\n$code")
+        assertFalse(code.contains("assertFalse"), "Should not contain assertFalse in a fault test, got:\n$code")
+        assertFalse(code.contains("assertNotNull"), "Should not contain assertNotNull in a fault test, got:\n$code")
     }
 
     @Test

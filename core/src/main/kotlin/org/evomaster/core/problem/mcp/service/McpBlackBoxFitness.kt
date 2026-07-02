@@ -14,6 +14,8 @@ import org.evomaster.core.search.gene.ObjectGene
 import org.evomaster.core.search.gene.collection.ArrayGene
 import org.evomaster.core.search.gene.numeric.NumberGene
 import org.evomaster.core.search.gene.string.StringGene
+import org.evomaster.core.problem.enterprise.DetectedFault
+import org.evomaster.core.problem.enterprise.ExperimentalFaultCategory
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 
@@ -61,9 +63,20 @@ class McpBlackBoxFitness : McpFitness() {
                         result.setIsError(toolResult.isError)
                         result.stopping = false
 
-                        val targetId = idMapper.handleLocalTarget("tool:${action.toolName}")
-                        val score = if (!toolResult.isError) 1.0 else 0.5
-                        fv.updateTarget(targetId, score, i)
+                        val successTargetId = idMapper.handleLocalTarget("tool:${action.toolName}:success")
+                        val errorTargetId = idMapper.handleLocalTarget("tool:${action.toolName}:error")
+                        if (!toolResult.isError) {
+                            fv.updateTarget(successTargetId, 1.0, i)
+                            fv.updateTarget(errorTargetId, 0.5, i)
+                        } else {
+                            fv.updateTarget(successTargetId, 0.5, i)
+                            fv.updateTarget(errorTargetId, 1.0, i)
+                            val faultTargetId = idMapper.handleLocalTarget(
+                                idMapper.getFaultDescriptiveId(ExperimentalFaultCategory.MCP_TOOL_ERROR, action.toolName)
+                            )
+                            fv.updateTarget(faultTargetId, 1.0, i)
+                            result.addFault(DetectedFault(ExperimentalFaultCategory.MCP_TOOL_ERROR, action.toolName, null))
+                        }
                     }
 
                     is McpResourceReadAction -> {
@@ -84,6 +97,16 @@ class McpBlackBoxFitness : McpFitness() {
                 log.warn("Exception evaluating MCP action ${action.id}: ${e.message}")
                 result.setIsError(true)
                 result.stopping = true
+                val operationId = when (action) {
+                    is McpToolCallAction -> action.toolName
+                    is McpResourceReadAction -> "resource:${action.resolvedUri()}"
+                    else -> action.id
+                }
+                val faultTargetId = idMapper.handleLocalTarget(
+                    idMapper.getFaultDescriptiveId(ExperimentalFaultCategory.MCP_TOOL_ERROR, operationId)
+                )
+                fv.updateTarget(faultTargetId, 1.0, i)
+                result.addFault(DetectedFault(ExperimentalFaultCategory.MCP_TOOL_ERROR, operationId, null))
                 break
             }
         }

@@ -5,6 +5,8 @@ import org.evomaster.core.output.clustering.SplitResult
 import org.evomaster.core.output.service.PartialOracles
 import org.evomaster.core.problem.graphql.GraphQlCallResult
 import org.evomaster.core.problem.httpws.HttpWsCallResult
+import org.evomaster.core.problem.mcp.McpCallResult
+import org.evomaster.core.problem.mcp.McpIndividual
 import org.evomaster.core.problem.rpc.RPCCallResult
 import org.evomaster.core.problem.rpc.RPCIndividual
 import org.evomaster.core.search.*
@@ -82,6 +84,8 @@ object TestSuiteSplitter {
             EMConfig.TestSuiteSplitType.FAULTS -> {
                 if(config.problemType == EMConfig.ProblemType.RPC){
                     splitRPCByException(solution as Solution<RPCIndividual>).splitOutcome
+                } else if(config.problemType == EMConfig.ProblemType.MCP) {
+                    splitMcpByFault(solution as Solution<McpIndividual>)
                 } else {
                     splitByFault(solution, config)
                 }
@@ -121,15 +125,9 @@ object TestSuiteSplitter {
                 !ind.hasAnyPotentialFault()
                         &&
                         ind.evaluatedMainActions().all { ac ->
-                            val result = ac.result
-                            if (result !is HttpWsCallResult) {
-                                // non-HTTP problem types (e.g. MCP) have no HTTP status codes;
-                                // skip the HTTP-specific success check
-                                false
-                            } else {
-                                val code = result.getStatusCode()
-                                (code != null && code < 400)
-                            }
+                            //TODO generic per type
+                            val code = (ac.result as HttpWsCallResult).getStatusCode()
+                            (code != null && code < 400)
                         }
             }.toMutableList()
 
@@ -248,6 +246,36 @@ object TestSuiteSplitter {
 //        )
 //    }
 
+
+    /**
+     * MCP analogue of [splitByFault].
+     *
+     * An individual goes to FAULTS if [hasAnyPotentialFault] is true (i.e. at least one action
+     * registered a PotentialFault target — see [McpBlackBoxFitness]).
+     * An individual goes to SUCCESSES if it has no faults and every [McpCallResult] has
+     * [McpCallResult.getIsError] == false.
+     * Everything else (mixed results, empty action sets) goes to OTHERS.
+     */
+    private fun splitMcpByFault(solution: Solution<McpIndividual>): List<Solution<McpIndividual>> {
+        val faults = solution.individuals.filter { it.hasAnyPotentialFault() }.toMutableList()
+
+        val successes = solution.individuals.filter { ind ->
+            !ind.hasAnyPotentialFault()
+                    && ind.evaluatedMainActions().all { ac ->
+                ac.result is McpCallResult && !ac.result.getIsError()
+            }
+        }.toMutableList()
+
+        val remainder = solution.individuals.filter {
+            !faults.contains(it) && !successes.contains(it)
+        }.toMutableList()
+
+        return listOf(
+                Solution(faults, solution.testSuiteNamePrefix, solution.testSuiteNameSuffix, Termination.FAULTS, listOf(), listOf()),
+                Solution(successes, solution.testSuiteNamePrefix, solution.testSuiteNameSuffix, Termination.SUCCESSES, listOf(), listOf()),
+                Solution(remainder, solution.testSuiteNamePrefix, solution.testSuiteNameSuffix, Termination.OTHERS, listOf(), listOf())
+        )
+    }
 
     /**
      * [splitByFault] splits the Solution into several subsets based on whether they detect faults.

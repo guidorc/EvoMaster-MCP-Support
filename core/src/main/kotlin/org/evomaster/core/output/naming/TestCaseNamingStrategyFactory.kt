@@ -8,6 +8,7 @@ import org.evomaster.core.output.service.TestCaseWriter
 import org.evomaster.core.problem.graphql.GraphQLIndividual
 import org.evomaster.core.problem.rest.data.RestIndividual
 import org.evomaster.core.problem.rpc.RPCIndividual
+import org.evomaster.core.problem.mcp.McpIndividual
 import org.evomaster.core.problem.webfrontend.WebIndividual
 import org.evomaster.core.search.Solution
 import org.slf4j.Logger
@@ -48,6 +49,8 @@ class TestCaseNamingStrategyFactory(
                 log.warn("Web individuals do not have action based test case naming yet. Defaulting to Numbered strategy.")
                 NamingHelperNumberedTestCaseNamingStrategy(solution)
             }
+            individuals.any { it.individual is McpIndividual } ->
+                NamingHelperNumberedTestCaseNamingStrategy(solution)
             individuals.isEmpty() -> {
                 log.warn("No individuals present in the solution. Defaulting to Numbered strategy.")
                 NumberedTestCaseNamingStrategy(solution)
