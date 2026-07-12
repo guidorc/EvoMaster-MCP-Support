@@ -99,15 +99,32 @@ class HttpMcpClient(private val baseUrl: String) : McpClient {
         try { conn.inputStream.close() } catch (_: Exception) {}
     }
 
-    /** Send a JSON-RPC request. Returns null on 4xx (method not supported). */
+    /**
+     * Send a JSON-RPC request and return the parsed top-level response map (which may carry
+     * either a "result" or a JSON-RPC "error" object). Returns null only when no body could be
+     * read/parsed at all (e.g. a truly unsupported method with an empty response).
+     */
     private fun post(method: String, params: Map<String, Any?> = emptyMap()): Map<String, Any?>? {
         val (conn, _) = openConnection(method, params)
         val status = conn.responseCode
-        if (status == 400 || status == 404 || status == 405) {
+        val stream = if (status >= 400) conn.errorStream else conn.inputStream
+        val responseBody = stream?.use { it.readBytes().toString(Charsets.UTF_8) } ?: return null
+        if (responseBody.isBlank()) {
             return null
         }
-        val responseBody = conn.inputStream.use { it.readBytes().toString(Charsets.UTF_8) }
-        return mapper.readValue(responseBody, Map::class.java) as Map<String, Any?>
+        return try {
+            mapper.readValue(responseBody, Map::class.java) as Map<String, Any?>
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /** Extract a JSON-RPC "error" object from a parsed response map, if present. */
+    private fun extractProtocolError(response: Map<String, Any?>): McpProtocolError? {
+        val error = response["error"] as? Map<String, Any?> ?: return null
+        val code = (error["code"] as? Number)?.toInt() ?: 0
+        val message = error["message"] as? String ?: ""
+        return McpProtocolError(code, message)
     }
 
     override fun listTools(): List<McpToolDefinition> {
@@ -123,7 +140,8 @@ class HttpMcpClient(private val baseUrl: String) : McpClient {
                     McpToolDefinition(
                         name = t["name"] as? String ?: "",
                         description = t["description"] as? String ?: "",
-                        inputSchema = t["inputSchema"] as? Map<String, Any?> ?: emptyMap()
+                        inputSchema = t["inputSchema"] as? Map<String, Any?> ?: emptyMap(),
+                        outputSchema = t["outputSchema"] as? Map<String, Any?>
                     )
                 )
             }
@@ -180,6 +198,10 @@ class HttpMcpClient(private val baseUrl: String) : McpClient {
     override fun callTool(name: String, arguments: Map<String, Any?>): McpToolResult {
         val response = post("tools/call", mapOf("name" to name, "arguments" to arguments))
             ?: return McpToolResult(isError = true)
+        val protocolError = extractProtocolError(response)
+        if (protocolError != null) {
+            return McpToolResult(isError = true, protocolError = protocolError)
+        }
         val result = response["result"] as? Map<String, Any?> ?: return McpToolResult(isError = true)
         val rawContent = result["content"] as? List<*> ?: emptyList<Any>()
         val content = rawContent.filterIsInstance<Map<String, Any?>>().map { c ->
@@ -192,13 +214,18 @@ class HttpMcpClient(private val baseUrl: String) : McpClient {
         }
         return McpToolResult(
             content = content,
-            isError = result["isError"] as? Boolean ?: false
+            isError = result["isError"] as? Boolean ?: false,
+            structuredContent = result["structuredContent"] as? Map<String, Any?>
         )
     }
 
     override fun readResource(uri: String): McpResourceResult {
         val response = post("resources/read", mapOf("uri" to uri))
             ?: return McpResourceResult()
+        val protocolError = extractProtocolError(response)
+        if (protocolError != null) {
+            return McpResourceResult(protocolError = protocolError)
+        }
         val result = response["result"] as? Map<String, Any?> ?: return McpResourceResult()
         val rawContents = result["contents"] as? List<*> ?: emptyList<Any>()
         val contents = rawContents.filterIsInstance<Map<String, Any?>>().map { c ->

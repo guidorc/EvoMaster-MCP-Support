@@ -4,7 +4,8 @@ package org.evomaster.core.problem.mcp.client
 data class McpToolDefinition(
     val name: String,
     val description: String = "",
-    val inputSchema: Map<String, Any?> = emptyMap()
+    val inputSchema: Map<String, Any?> = emptyMap(),
+    val outputSchema: Map<String, Any?>? = null
 )
 
 /** Static resource as returned by the MCP `resources/list` response. */
@@ -25,12 +26,15 @@ data class McpResourceTemplate(
 /** Result of a `tools/call` invocation, as defined by the MCP specification. */
 data class McpToolResult(
     val content: List<McpContent> = emptyList(),
-    val isError: Boolean = false
+    val isError: Boolean = false,
+    val structuredContent: Map<String, Any?>? = null,
+    val protocolError: McpProtocolError? = null
 )
 
 /** Result of a `resources/read` invocation, as defined by the MCP specification. */
 data class McpResourceResult(
-    val contents: List<McpContent> = emptyList()
+    val contents: List<McpContent> = emptyList(),
+    val protocolError: McpProtocolError? = null
 )
 
 /** Content item within a tool or resource response. */
@@ -39,4 +43,10 @@ data class McpContent(
     val text: String? = null,
     val uri: String? = null,
     val mimeType: String? = null
+)
+
+/** Mirrors the JSON-RPC 2.0 error object: {"code": ..., "message": ...}. */
+data class McpProtocolError(
+    val code: Int,
+    val message: String
 )

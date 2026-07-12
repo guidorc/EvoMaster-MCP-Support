@@ -42,6 +42,9 @@ class McpSampler : ApiWsSampler<McpIndividual>() {
     /** Actions for MCP tool calls, keyed by "tool:<toolName>" */
     private val toolActionCluster: MutableMap<String, McpToolCallAction> = mutableMapOf()
 
+    /** Declared output JSON Schema per tool name, as returned by `tools/list` (null if the tool declares none) */
+    private val outputSchemas: MutableMap<String, Map<String, Any?>?> = mutableMapOf()
+
     /** Actions for MCP resource reads, keyed by "resource:<uri>" or template key */
     private val resourceActionCluster: MutableMap<String, McpResourceReadAction> = mutableMapOf()
 
@@ -60,6 +63,7 @@ class McpSampler : ApiWsSampler<McpIndividual>() {
         actionCluster.clear()
         toolActionCluster.clear()
         resourceActionCluster.clear()
+        outputSchemas.clear()
 
         // MCP requires initialize handshake before any other call
         try {
@@ -87,6 +91,7 @@ class McpSampler : ApiWsSampler<McpIndividual>() {
             )
             toolActionCluster[action.id] = action
             actionCluster[action.id] = action
+            outputSchemas[tool.name] = tool.outputSchema
         }
 
         // Discover static resources
@@ -231,4 +236,6 @@ class McpSampler : ApiWsSampler<McpIndividual>() {
     // -------------------------------------------------------------------------
 
     fun getMcpClient(): HttpMcpClient = mcpClient
+
+    fun getOutputSchema(toolName: String): Map<String, Any?>? = outputSchemas[toolName]
 }
