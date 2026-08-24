@@ -9,6 +9,7 @@ import org.evomaster.core.problem.rest.data.RestCallAction
 import org.evomaster.core.problem.rest.data.RestIndividual
 import org.evomaster.core.problem.rpc.RPCCallAction
 import org.evomaster.core.problem.rpc.RPCIndividual
+import org.evomaster.core.problem.mcp.McpIndividual
 import org.evomaster.core.problem.webfrontend.WebIndividual
 import org.evomaster.core.search.EvaluatedIndividual
 import org.evomaster.core.search.Solution
@@ -177,6 +178,7 @@ class SortingHelper {
                 log.warn("Web individuals do not have action based test case naming yet. Defaulting to Numbered strategy.")
                 statusCode
             }
+            tests.any { it.individual is McpIndividual } -> coveredTargets
             else -> throw IllegalStateException("Unrecognized test individuals with no target incremental based sorting strategy set.")
         }
 
