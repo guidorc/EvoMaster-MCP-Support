@@ -9,6 +9,7 @@ import net.sf.jsqlparser.statement.Statement;
 import net.sf.jsqlparser.statement.delete.Delete;
 import net.sf.jsqlparser.statement.select.*;
 import net.sf.jsqlparser.statement.update.Update;
+import org.evomaster.client.java.distance.heuristics.DistanceHelper;
 import org.evomaster.client.java.distance.heuristics.Truthness;
 import org.evomaster.client.java.distance.heuristics.TruthnessUtils;
 import org.evomaster.client.java.sql.*;
@@ -24,15 +25,11 @@ import org.evomaster.client.java.utils.SimpleLogger;
 import java.util.*;
 import java.util.stream.Collectors;
 
+import static org.evomaster.client.java.distance.heuristics.TruthnessUtils.FALSE_TRUTHNESS;
+import static org.evomaster.client.java.distance.heuristics.TruthnessUtils.TRUE_TRUTHNESS;
 import static org.evomaster.client.java.sql.internal.SqlParserUtils.*;
 
 public class SqlHeuristicsCalculator {
-
-    public static double C = 0.1;
-    public static double C_BETTER = C + (C / 2);
-    public static Truthness TRUE_TRUTHNESS = new Truthness(1, C);
-    public static Truthness FALSE_TRUTHNESS = TRUE_TRUTHNESS.invert();
-    public static Truthness FALSE_TRUTHNESS_BETTER = new Truthness(C_BETTER, 1);
 
     private final SqlExpressionEvaluator parentExpressionEvaluator;
     private final QueryResultSet sourceQueryResultSet;
@@ -124,7 +121,8 @@ public class SqlHeuristicsCalculator {
             double distanceToTrue = 1.0d - t.getOfTrue();
             return new SqlDistanceWithMetrics(distanceToTrue, 0, false);
         } catch (Exception ex) {
-            SimpleLogger.uniqueWarn("Failed to compute complete SQL heuristics for: " + sqlCommand);
+            SimpleLogger.uniqueWarn("Failed to compute complete SQL heuristics for: " + sqlCommand
+                    + " | cause: " + ex.getClass().getName() + ": " + ex.getMessage());
             return new SqlDistanceWithMetrics(Double.MAX_VALUE, 0, true);
         }
     }
@@ -569,7 +567,7 @@ public class SqlHeuristicsCalculator {
         }
         final Truthness havingTruthness;
         if (truthnesses.isEmpty()) {
-            havingTruthness = SqlHeuristicsCalculator.TRUE_TRUTHNESS;
+            havingTruthness = TRUE_TRUTHNESS;
         } else {
             havingTruthness = TruthnessUtils.buildOrAggregationTruthness(truthnesses.toArray(new Truthness[]{}));
         }
@@ -876,7 +874,7 @@ public class SqlHeuristicsCalculator {
             if (!filteredQueryResult.isEmpty()) {
                 truthness = TRUE_TRUTHNESS;
             } else {
-                truthness = TruthnessUtils.buildScaledTruthness(C, maxOfTrue);
+                truthness = TruthnessUtils.buildScaledTruthness(DistanceHelper.H_NOT_NULL, maxOfTrue);
             }
             return new SqlHeuristicResult(truthness, filteredQueryResult);
         }

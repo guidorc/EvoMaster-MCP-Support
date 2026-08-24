@@ -265,6 +265,7 @@ There are 3 types of options:
 |Options|Description|
 |---|---|
 |`aIClassificationMetrics`| __Enum__. Determines which metric-tracking strategy is used by the AI response classifier. *Valid values*: `TIME_WINDOW, FULL_HISTORY`. *Default value*: `FULL_HISTORY`.|
+|`aIEnsembleBestModelSelectionStrategy`| __Enum__. Strategy used to select the best-performing model when a combination of AI models are used as an ensemble model for response classification. *Valid values*: `MAX_OF_AVERAGE, MAX_OF_HARMONIC_MEAN, MAX_OF_MIN`. *Default value*: `MAX_OF_AVERAGE`.|
 |`aIResponseClassifierWeaknessThreshold`| __Double__. Minimum confidence threshold required for the AI response classifier to decidewhether to send a request as-is or attempt a repair. *Default value*: `0.8`.|
 |`abstractInitializationGeneToMutate`| __Boolean__. During mutation, whether to abstract genes for repeated SQL actions. *Default value*: `false`.|
 |`aiClassifierRepairActivation`| __Enum__. Specify how the classification of actions's response will be used to execute a possible repair on the action. *Valid values*: `PROBABILITY, THRESHOLD`. *Default value*: `THRESHOLD`.|
@@ -279,6 +280,7 @@ There are 3 types of options:
 |`callbackURLHostname`| __String__. HTTP callback verifier hostname. Default is set to 'localhost'. If the SUT is running inside a container (i.e., Docker), 'localhost' will refer to the container. This can be used to change the hostname. *Default value*: `localhost`.|
 |`cgaNeighborhoodModel`| __Enum__. Cellular GA: neighborhood model (RING, L5, C9, C13). *Valid values*: `RING, L5, C9, C13`. *Default value*: `RING`.|
 |`classificationRepairThreshold`| __Double__. If using THRESHOLD for AI Classification Repair, specify its value. All classifications with probability equal or above such threshold value will be accepted. *Constraints*: `probability 0.0-1.0`. *Default value*: `0.5`.|
+|`collectSqlZ3Stats`| __Boolean__. Collect detailed statistics for Z3-based SQL generation: SAT/UNSAT/error counts, query uniqueness, Z3 execution time, and SMT-LIB generation time. Only meaningful when generateSqlDataWithZ3=true. *Depends on*: `generateSqlDataWithZ3=true`. *Default value*: `false`.|
 |`discoveredInfoRewardedInFitness`| __Boolean__. If there is new discovered information from a test execution, reward it in the fitness function. *Default value*: `false`.|
 |`dockerLocalhost`| __Boolean__. Replace references to 'localhost' to point to the actual host machine. Only needed when running EvoMaster inside Docker. *Default value*: `false`.|
 |`dpcTargetTestSize`| __Int__. Specify a max size of a test to be targeted when either DPC_INCREASING or DPC_DECREASING is enabled. *Default value*: `1`.|
@@ -287,6 +289,7 @@ There are 3 types of options:
 |`enableAdvancedFormats`| __Boolean__. Whether to enable the handling of new type formats in OpenAPI schemas, e.g., the ones introduced in 3.1.0. *Default value*: `false`.|
 |`enableCustomizedMethodForMockObjectHandling`| __Boolean__. Whether to apply customized method (i.e., implement 'customizeMockingRPCExternalService' for external services or 'customizeMockingDatabase' for database) to handle mock object. *Default value*: `false`.|
 |`enableCustomizedMethodForScheduleTaskHandling`| __Boolean__. Whether to apply customized method (i.e., implement 'customizeScheduleTaskInvocation' for invoking schedule task) to invoke schedule task. *Default value*: `false`.|
+|`enableMultipartFormDataSupport`| __Boolean__. Enable multipart/form-data support when building REST actions. *Default value*: `false`.|
 |`enableRPCCustomizedTestOutput`| __Boolean__. Whether to enable customized RPC Test output if 'customizeRPCTestOutput' is implemented. *Default value*: `false`.|
 |`enableStaticFlakyInference`| __Boolean__. Specify whether to infer potential flakiness statically from response values, such as timestamps, UUIDs, hashes and runtime-specific messages. *Depends on*: `handleFlakiness=true`. *Default value*: `true`.|
 |`enableWriteSnapshotTests`| __Boolean__. Enable to print snapshots of the generated tests during the search in an interval defined in snapshotsInterval. *Default value*: `false`.|
@@ -300,7 +303,7 @@ There are 3 types of options:
 |`externalServiceIPSelectionStrategy`| __Enum__. Specify a method to select the first external service spoof IP address. *Valid values*: `NONE, DEFAULT, USER, RANDOM`. *Default value*: `NONE`.|
 |`extractRedisExecutionInfo`| __Boolean__. Enable extracting Redis execution info. *Depends on*: `blackBox=false`. *Default value*: `false`.|
 |`generateRedisData`| __Boolean__. Enable EvoMaster to generate Redis data with direct accesses to the database. *Depends on*: `blackBox=false`. *Default value*: `false`.|
-|`generateSqlDataWithDSE`| __Boolean__. Enable EvoMaster to generate SQL data with direct accesses to the database. Use Dynamic Symbolic Execution. *Depends on*: `blackBox=false`. *Default value*: `false`.|
+|`generateSqlDataWithZ3`| __Boolean__. Enable EvoMaster to generate SQL data with direct accesses to the database. Use the Z3 SMT solver. *Depends on*: `blackBox=false`. *Default value*: `false`.|
 |`handleFlakiness`| __Boolean__. Specify whether to detect flakiness and handle the flakiness in assertions during post handling of fuzzing. Note that flakiness is now supported only for fuzzing REST APIs. *Default value*: `false`.|
 |`heuristicsForRedis`| __Boolean__. Tracking of Redis commands to improve test generation. *Depends on*: `blackBox=false`. *Default value*: `false`.|
 |`heuristicsForSQLAdvanced`| __Boolean__. If using SQL heuristics, enable more advanced version. *Depends on*: `blackBox=false`. *Default value*: `false`.|
@@ -344,7 +347,9 @@ There are 3 types of options:
 |`seedTestCasesFormat`| __Enum__. Format of the test cases seeded to EvoMaster. *Valid values*: `POSTMAN`. *Default value*: `POSTMAN`.|
 |`seedTestCasesPath`| __String__. File path where the seeded test cases are located. *Default value*: `postman.postman_collection.json`.|
 |`skipAIModelUpdateWhenResponseIs5xx`| __Boolean__. Determines whether the AI response classifier skips model updates when the response indicates a server-side error with status code 5xx. *Default value*: `false`.|
-|`skipAIModelUpdateWhenResponseIsNot2xxOr400`| __Boolean__. Determines whether the AI response classifier skips model updates when the response is not 2xx or 400. *Default value*: `false`.|
+|`skipAIModelUpdateWhenResponseIsNot2xxOr400`| __Boolean__. Determines whether the AI response classifier skips model updates when the response is not 2xx or 400. *Default value*: `true`.|
+|`sqlZ3NumberOfRows`| __Int__. Number of rows the Z3 solver generates per table when solving a failed SQL query. The default of 1 is sufficient for the currently supported queries; generating a single row per table already forces the query to return a non-empty result. This will need to be increased once support for more complex JOINs (matching arbitrary row combinations, not just the diagonal pairing of row i with row i) is added. Only meaningful when generateSqlDataWithZ3=true. *Constraints*: `min=1.0`. *Depends on*: `generateSqlDataWithZ3=true`. *Default value*: `1`.|
+|`sqlZ3TimeoutMs`| __Int__. Soft timeout, in milliseconds, for each Z3 solver invocation when generating SQL data. If a query exceeds it, Z3 returns 'unknown' for that query instead of running unbounded. A value of 0 disables the timeout. Only meaningful when generateSqlDataWithZ3=true. *Constraints*: `min=0.0`. *Depends on*: `generateSqlDataWithZ3=true`. *Default value*: `5000`.|
 |`statusOracles`| __Boolean__. Lightweight checks on HTTP status codes, e.g., a GET should not return a 201 Created. *Default value*: `false`.|
 |`structureMutationProFS`| __Double__. Specify a probability of applying structure mutator during the focused search. *Constraints*: `probability 0.0-1.0`. *Default value*: `0.0`.|
 |`structureMutationProbStrategy`| __Enum__. Specify a strategy to handle a probability of applying structure mutator during the focused search. *Valid values*: `SPECIFIED, SPECIFIED_FS, DPC_TO_SPECIFIED_BEFORE_FS, DPC_TO_SPECIFIED_AFTER_FS, ADAPTIVE_WITH_IMPACT`. *Default value*: `SPECIFIED`.|

@@ -12,11 +12,7 @@ import org.evomaster.core.problem.mcp.McpToolCallAction
 import org.evomaster.core.problem.mcp.McpUriParam
 import org.evomaster.core.problem.mcp.client.HttpMcpClient
 import org.evomaster.core.search.action.ActionComponent
-import org.evomaster.core.search.gene.Gene
 import org.evomaster.core.search.gene.ObjectGene
-import org.evomaster.core.search.gene.collection.ArrayGene
-import org.evomaster.core.search.gene.numeric.IntegerGene
-import org.evomaster.core.search.gene.BooleanGene
 import org.evomaster.core.search.gene.string.StringGene
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
@@ -51,40 +47,13 @@ class McpSampler : ApiWsSampler<McpIndividual>() {
     /** Pre-built single-call individuals, drained first in smartSample() */
     private val adHocInitialIndividuals: MutableList<McpIndividual> = mutableListOf()
 
-    @PostConstruct
-    fun initialize() {
-        val name = McpSampler::class.simpleName
-        val url = config.bbTargetUrl
-        log.debug("Initializing {}", name)
-
-
-        mcpClient = HttpMcpClient(url)
-
-        actionCluster.clear()
-        toolActionCluster.clear()
-        resourceActionCluster.clear()
-        outputSchemas.clear()
-
-        // MCP requires initialize handshake before any other call
-        try {
-            mcpClient.initialize()
-        } catch (e: Exception) {
-            throw SutProblemException(
-                "Failed to initialize MCP session at '${config.bbTargetUrl}'. Cause: ${e.message}"
-            )
-        }
-
-        // Discover tools
-        val tools = try {
-            mcpClient.listTools()
-        } catch (e: Exception) {
-            throw SutProblemException(
-                "Failed to connect to MCP server at '${config.bbTargetUrl}'. " +
-                "Make sure the server is running and the URL is correct. Cause: ${e.message}"
-            )
-        }
+    /** Builds the tool actions cluster as part of the initialization process */
+    private fun discoverTools() {
+        val tools = mcpClient.listTools()
         for (tool in tools) {
-            val inputGene = buildObjectGeneFromSchema("input", tool.inputSchema)
+            // TODO: build the input gene from tool.inputSchema via a dedicated
+            //  McpActionBuilder (similar to GraphQLActionBuilder)
+            val inputGene = ObjectGene("input", emptyList())
             val action = McpToolCallAction(
                 toolName = tool.name,
                 inputSchema = inputGene
@@ -93,16 +62,20 @@ class McpSampler : ApiWsSampler<McpIndividual>() {
             actionCluster[action.id] = action
             outputSchemas[tool.name] = tool.outputSchema
         }
+    }
 
-        // Discover static resources
+    /** Builds the resource actions cluster as part of the initialization process */
+    private fun discoverResources() {
         val resources = mcpClient.listResources()
         for (resource in resources) {
             val action = McpResourceReadAction(uriTemplate = resource.uri, uriParams = emptyList(), isTemplate = false)
             resourceActionCluster[action.id] = action
             actionCluster[action.id] = action
         }
+    }
 
-        // Discover resource templates
+    /** Add templatized resources tho the resource actions cluster as part of the initialization process */
+    private fun discoverResourceTemplates() {
         val templates = mcpClient.listResourceTemplates()
         for (template in templates) {
             val paramNames = Regex("""\{(\w+)}""").findAll(template.uriTemplate).map { it.groupValues[1] }.toList()
@@ -113,14 +86,37 @@ class McpSampler : ApiWsSampler<McpIndividual>() {
             resourceActionCluster[key] = action
             actionCluster[key] = action
         }
+    }
 
+    @PostConstruct
+    fun initialize() {
+        val name = McpSampler::class.simpleName
+        val url = config.base
+        log.debug("Initializing {}", name)
+
+
+        mcpClient = HttpMcpClient(url)
+
+        actionCluster.clear()
+        toolActionCluster.clear()
+        resourceActionCluster.clear()
+
+        // MCP requires initialize handshake before any other call
+        try {
+            mcpClient.initialize()
+        } catch (e: Exception) {
+            throw SutProblemException(
+                "Failed to initialize MCP session at '${config.base}'. Cause: ${e.message}"
+            )
+        }
+
+        // Discover server capabilities
+        discoverTools()
+        discoverResources()
+        discoverResourceTemplates()
+
+        // Builds the initial individuals
         customizeAdHocInitialIndividuals()
-
-        val toolQuantity = toolActionCluster.size
-        val resourceQuantity = resourceActionCluster.size
-
-        log.debug("Done initializing {} — {} tools, {} resources",
-            name, toolQuantity, resourceQuantity)
     }
 
     // -------------------------------------------------------------------------
@@ -138,8 +134,9 @@ class McpSampler : ApiWsSampler<McpIndividual>() {
             return ind
         }
 
-        val n = randomness.nextInt(1, getMaxTestSizeDuringSampler())
-        val groups: MutableList<ActionComponent> = (0 until n).map {
+        // Build a random-sized test by picking N random actions, each wrapped in its own group
+        val numberOfActions = randomness.nextInt(1, getMaxTestSizeDuringSampler())
+        val groups: MutableList<ActionComponent> = (0 until numberOfActions).map {
             val action = randomness.choose(allActions).copy() as McpAction
             action.doInitialize(randomness)
             makeGroup(action)
@@ -160,7 +157,7 @@ class McpSampler : ApiWsSampler<McpIndividual>() {
     override fun hasSpecialInitForSmartSampler(): Boolean = adHocInitialIndividuals.isNotEmpty()
 
     override fun initSeededTests(infoDto: SutInfoDto?) {
-        // Not supported in Phase 3
+        throw UnsupportedOperationException("MCP seeded testing is not yet supported")
     }
 
     // -------------------------------------------------------------------------
@@ -170,15 +167,8 @@ class McpSampler : ApiWsSampler<McpIndividual>() {
     private fun customizeAdHocInitialIndividuals() {
         adHocInitialIndividuals.clear()
 
-        for ((_, action) in toolActionCluster) {
-            val copy = action.copy() as McpAction
-            copy.doInitialize(randomness)
-            val ind = McpIndividual(SampleType.RANDOM, mutableListOf(makeGroup(copy)))
-            ind.doGlobalInitialize(searchGlobalState)
-            adHocInitialIndividuals.add(ind)
-        }
-
-        for ((_, action) in resourceActionCluster) {
+        val mcpActions = toolActionCluster.values + resourceActionCluster.values
+        for (action in mcpActions) {
             val copy = action.copy() as McpAction
             copy.doInitialize(randomness)
             val ind = McpIndividual(SampleType.RANDOM, mutableListOf(makeGroup(copy)))
@@ -193,42 +183,6 @@ class McpSampler : ApiWsSampler<McpIndividual>() {
      */
     private fun makeGroup(action: McpAction): EnterpriseActionGroup<McpAction> {
         return EnterpriseActionGroup(action)
-    }
-
-    // -------------------------------------------------------------------------
-    // Gene building from JSON Schema
-    // -------------------------------------------------------------------------
-
-    /**
-     * Recursively build a [Gene] from a JSON Schema node.
-     *
-     * Supported types: string, integer, number, boolean, object, array.
-     * Unknown or missing types fall back to [StringGene].
-     */
-    internal fun buildGeneFromSchema(name: String, schema: Map<String, Any?>): Gene {
-        val type = schema["type"] as? String
-
-        return when (type) {
-            "string" -> StringGene(name)
-            "integer", "number" -> IntegerGene(name)
-            "boolean" -> BooleanGene(name)
-            "object" -> buildObjectGeneFromSchema(name, schema)
-            "array" -> ArrayGene(name, StringGene("element"))
-            else -> StringGene(name) // fallback for unknown/null types
-        }
-    }
-
-    /**
-     * Build an [ObjectGene] from a JSON Schema map.
-     * If the schema has no "properties" key, returns an empty [ObjectGene].
-     */
-    internal fun buildObjectGeneFromSchema(name: String, schema: Map<String, Any?>): ObjectGene {
-        val properties = schema["properties"] as? Map<String, Any?> ?: emptyMap()
-        val fields = properties.entries.map { (propName, propSchema) ->
-            val propSchemaMap = propSchema as? Map<String, Any?> ?: emptyMap()
-            buildGeneFromSchema(propName, propSchemaMap)
-        }
-        return ObjectGene(name, fields)
     }
 
     // -------------------------------------------------------------------------

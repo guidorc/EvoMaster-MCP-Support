@@ -11,7 +11,7 @@ private const val EOF_TOKEN = "<EOF>"
 /**
  * Created by arcuri82 on 11-Sep-19.
  */
-class GeneRegexJavaVisitor(externalRegexFlags: RegexFlags = RegexFlags()) : RegexJavaBaseVisitor<VisitResult>(){
+class GeneRegexJavaVisitor(val sourceRegex: String, val externalRegexFlags: RegexFlags = RegexFlags()) : RegexJavaParserBaseVisitor<VisitResult>(){
 
     private val hexEscapePrefixes = setOf('x', 'u')
 
@@ -28,13 +28,9 @@ class GeneRegexJavaVisitor(externalRegexFlags: RegexFlags = RegexFlags()) : Rege
     )
 
     /**
-     * These are the Java regex syntax characters, all of these can be escaped to be treated as literals.
+     * None of these can be escaped to be treated as literals. Some may be part of legal escape sequences.
      */
-    private val allowedSyntaxEscapes = setOf(
-        '^', '$', '\\', '.', '*', '+', '?',
-        '(', ')', '[', ']', '{', '}', '|',
-        '/', '-', ',' ,':', '<', '>', '=', '!'
-    )
+    private val notIdentityEscapes = ('a'..'z').toList() + ('A'..'Z').toList() + ('0'..'9').toList()
 
     /**
      * Capture groups in order of appearance (1-based index -> list index 0).
@@ -64,23 +60,7 @@ class GeneRegexJavaVisitor(externalRegexFlags: RegexFlags = RegexFlags()) : Rege
      */
     private var currentFlags = externalRegexFlags
 
-    /**
-     * Parses a FLAG_GROUP_OPEN or FLAG_SCOPE_OPEN token text like "(?i:", "(?iu:", "(?-i:", "(?i-u:", "(?iu)", etc.
-     * into a [ParsedFlagExpression] that can be applied to the current flags.
-     */
-    private fun parseFlagToken(tokenText: String): ParsedFlagExpression {
-        // strip "(?" from start and ":" (or ")") from end
-        val inner = tokenText.drop(2).dropLast(1)
-
-        val (enableStr, disableStr) = if ('-' in inner)
-            inner.split('-', limit = 2).let { it[0] to it[1] }
-        else Pair(inner, "")
-
-        return ParsedFlagExpression(
-            RegexFlags.fromString(enableStr),
-            RegexFlags.fromString(disableStr)
-        )
-    }
+    private var hasAssertions = false
 
     /**
      * Builds DisjunctionListRxGenes from a disjunction context, returns null if disjunction is unsatisfiable.
@@ -109,6 +89,30 @@ class GeneRegexJavaVisitor(externalRegexFlags: RegexFlags = RegexFlags()) : Rege
         return disjList
     }
 
+    /**
+     * Walks up [ctx]'s ancestry towards the top-level pattern, searching for one of
+     * the currently-unsupported ways an assertion's ancestry can appear (nested).
+     * Returns true if it reaches the top-level pattern without hitting either, false otherwise.
+     */
+    private fun isAssertionNested(ctx: RegexJavaParser.AssertionContext): Boolean {
+        var current = ctx.parent
+        while (current != null && current !is RegexJavaParser.PatternContext) {
+            if (current is RegexJavaParser.AssertionContext) {
+                // assertion within assertion
+                return true
+            }
+            if (current is RegexJavaParser.AtomContext && current.disjunction() != null) {
+                val enclosingTerm = current.parent as? RegexJavaParser.TermContext
+                if (enclosingTerm?.quantifier() != null) {
+                    // assertion within quantified group
+                    return true
+                }
+            }
+            current = current.parent
+        }
+        return false
+    }
+
     override fun visitPattern(ctx: RegexJavaParser.PatternContext): VisitResult {
 
         val res = ctx.disjunction().accept(this)
@@ -129,8 +133,10 @@ class GeneRegexJavaVisitor(externalRegexFlags: RegexFlags = RegexFlags()) : Rege
         val gene = RegexGene(
             "regex",
             disjList,
-            text.substring(0, text.length - EOF_TOKEN.length),
-            RegexType.JVM
+            sourceRegex,
+            RegexType.JVM,
+            externalRegexFlags = externalRegexFlags,
+            hasAssertions = hasAssertions
         )
 
         return VisitResult(gene)
@@ -181,7 +187,7 @@ class GeneRegexJavaVisitor(externalRegexFlags: RegexFlags = RegexFlags()) : Rege
                 val previous = currentFlags
 
                 val merged = currentFlags.merge(
-                    parseFlagToken(term.FLAG_SCOPE_OPEN().text)
+                    ParsedFlagExpression.fromFlagToken(term.FLAG_SCOPE_OPEN().text)
                 )
 
                 merged.validate()
@@ -253,7 +259,23 @@ class GeneRegexJavaVisitor(externalRegexFlags: RegexFlags = RegexFlags()) : Rege
         val res = VisitResult()
 
         if(ctx.assertion() != null){
-            res.data = ctx.assertion().text
+            val assertionCtx = ctx.assertion()
+            if (assertionCtx.CARET() != null || assertionCtx.DOLLAR() != null) {
+                res.data = ctx.assertion().text
+            } else {
+                require(!isAssertionNested(ctx.assertion())){
+                    "Nested assertions are not currently supported."
+                }
+                val innerDisjList = buildDisjunctionList(assertionCtx.disjunction())
+                val assertionType = if (assertionCtx.LESS_THAN() != null) {
+                    AssertionType.LOOKBEHIND
+                } else {
+                    AssertionType.LOOKAHEAD
+                }
+                val assertionGene = AssertionRxGene(innerDisjList, assertionType)
+                hasAssertions = true
+                res.genes.add(assertionGene)
+            }
             return res
         }
 
@@ -367,7 +389,7 @@ class GeneRegexJavaVisitor(externalRegexFlags: RegexFlags = RegexFlags()) : Rege
             val previous = currentFlags
 
             val merged = currentFlags.merge(
-                parseFlagToken(ctx.FLAG_GROUP_OPEN().text)
+                ParsedFlagExpression.fromFlagToken(ctx.FLAG_GROUP_OPEN().text)
             )
 
             merged.validate()
@@ -388,8 +410,7 @@ class GeneRegexJavaVisitor(externalRegexFlags: RegexFlags = RegexFlags()) : Rege
 
         if(ctx.quote() != null){
 
-            val block = ctx.quote().quoteBlock().quoteChar().map { it.text }
-                    .joinToString("")
+            val block = ctx.quote().QUOTE_CONTENT()?.text ?: ""
 
             val name = if(block.isBlank()) "blankBlock" else block
 
@@ -442,7 +463,7 @@ class GeneRegexJavaVisitor(externalRegexFlags: RegexFlags = RegexFlags()) : Rege
         }
 
         if(ctx.DOT() != null){
-            return VisitResult(AnyCharacterRxGene())
+            return VisitResult(AnyCharacterRxGene(currentFlags))
         }
 
         if(ctx.characterClass() != null){
@@ -546,7 +567,7 @@ class GeneRegexJavaVisitor(externalRegexFlags: RegexFlags = RegexFlags()) : Rege
             } else {
                 // This case handles the escaped syntax characters, like "\." and "\+", etc. cases
                 // where '.' and '+', etc. should be treated as regular chars
-                assert(startText[0] == '\\' && startText[1] in allowedSyntaxEscapes)
+                assert(startText[0] == '\\' && startText[1] !in notIdentityEscapes)
                 start = startText[1]
                 end = start
             }
@@ -722,7 +743,7 @@ class GeneRegexJavaVisitor(externalRegexFlags: RegexFlags = RegexFlags()) : Rege
                         currentFlags
                 )
             }
-            in allowedSyntaxEscapes -> PatternCharacterBlockGene(txt, txt.substring(1), currentFlags)
+            !in notIdentityEscapes -> PatternCharacterBlockGene(txt, txt.substring(1), currentFlags)
             else -> CharacterClassEscapeRxGene(txt.substring(1), currentFlags)
         })
     }

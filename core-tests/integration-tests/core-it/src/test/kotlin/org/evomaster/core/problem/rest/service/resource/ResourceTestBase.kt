@@ -11,10 +11,10 @@ import org.evomaster.core.EMConfig
 import org.evomaster.core.TestUtils
 import org.evomaster.core.search.action.ActionFilter
 import org.evomaster.core.search.action.ActionResult
-import org.evomaster.core.sql.DatabaseExecutor
-import org.evomaster.core.sql.SqlAction
-import org.evomaster.core.sql.SqlActionResult
-import org.evomaster.core.sql.SqlInsertBuilder
+import org.evomaster.core.database.sql.DatabaseExecutor
+import org.evomaster.core.database.sql.SqlAction
+import org.evomaster.core.database.sql.SqlActionResult
+import org.evomaster.core.database.sql.SqlInsertBuilder
 import org.evomaster.core.sql.extract.h2.ExtractTestBaseH2
 import org.evomaster.core.problem.rest.data.RestCallAction
 import org.evomaster.core.problem.rest.data.RestIndividual
@@ -67,7 +67,7 @@ abstract class ResourceTestBase : ExtractTestBaseH2(), ResourceBasedTestInterfac
 
         config.heuristicsForSQL = false
         config.generateSqlDataWithSearch = false
-        config.generateSqlDataWithDSE = false
+        config.generateSqlDataWithZ3 = false
         config.geneMutationStrategy = EMConfig.GeneMutationStrategy.ONE_OVER_N_BIASED_SQL
     }
 

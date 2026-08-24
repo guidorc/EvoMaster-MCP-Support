@@ -5,12 +5,10 @@ import com.webfuzzing.commons.faults.FaultCategory
 import org.apache.http.HttpStatus
 import org.evomaster.core.EMConfig
 import org.evomaster.core.problem.enterprise.DetectedFault
-import org.evomaster.core.problem.enterprise.ExperimentalFaultCategory
 import org.evomaster.core.problem.enterprise.SampleType
-import org.evomaster.core.problem.enterprise.auth.NoAuth
 import org.evomaster.core.problem.httpws.HttpWsCallResult
 import org.evomaster.core.problem.rest.*
-import org.evomaster.core.problem.rest.builder.CreateResourceUtils
+import org.evomaster.core.problem.rest.builder.DynamicPathUtils
 import org.evomaster.core.problem.rest.data.*
 import org.evomaster.core.problem.rest.service.CallGraphService
 import org.evomaster.core.problem.rest.service.RestSecurityBuilder
@@ -160,7 +158,7 @@ class RestSecurityOracle {
                     log.warn("Missing action result with id: ${it.getLocalId()}}")
                     false
                 } else {
-                    it.auth !is NoAuth && ar.getStatusCode() == 401
+                    !it.auth.isNoAuth() && ar.getStatusCode() == 401
                 }
             }
             .filter {
@@ -469,7 +467,7 @@ class RestSecurityOracle {
 
             if((a.verb == HttpVerb.PUT || a.verb == HttpVerb.PATCH || a.verb == HttpVerb.DELETE)
                 && faultyPaths.contains(a.path)
-                && a.auth is NoAuth
+                && a.auth.isNoAuth()
                 && StatusGroup.G_2xx.isInGroup(r.getStatusCode())){
 
                 // For PUT, check if it's 201 (resource creation - might be OK)
@@ -510,7 +508,7 @@ class RestSecurityOracle {
             val a = individual.seeMainExecutableActions()[index]
             val r = actionResults.find { it.sourceLocalId == a.getLocalId() } as RestCallResult
 
-            if(a.auth is NoAuth && faultyEndpoints.contains(a.getName()) &&  StatusGroup.G_2xx.isInGroup(r.getStatusCode())){
+            if(a.auth.isNoAuth() && faultyEndpoints.contains(a.getName()) &&  StatusGroup.G_2xx.isInGroup(r.getStatusCode())){
                 val scenarioId = idMapper.handleLocalTarget(
                     idMapper.getFaultDescriptiveId(DefinedFaultCategory.SECURITY_IGNORE_ANONYMOUS, a.getName())
                 )
@@ -562,7 +560,7 @@ class RestSecurityOracle {
     ): Boolean{
         verifySampleType(individual)
 
-        if(action.auth is NoAuth){
+        if(action.auth.isNoAuth()){
             return false
         }
         if((actionResults.find { it.sourceLocalId == action.getLocalId() } as RestCallResult).getStatusCode() != 401){
@@ -635,7 +633,7 @@ class RestSecurityOracle {
                  .getStatusCode())
         }.filter {
             // check if the action is not authenticated
-            it.auth is NoAuth
+            it.auth.isNoAuth()
         }
 
         return (a403.isNotEmpty() || a401.isNotEmpty()) && a2xxWithoutAuth.isNotEmpty()
@@ -684,7 +682,7 @@ class RestSecurityOracle {
 
         // Check for write operations without authentication that return 2xx
         val anonymousWriteActions = actionsWithResults.filter {
-            it.auth is NoAuth &&
+            it.auth.isNoAuth() &&
             StatusGroup.G_2xx.isInGroup((actionResults.find { r -> r.sourceLocalId == it.getLocalId() } as RestCallResult)
                 .getStatusCode())
         }
@@ -771,7 +769,7 @@ class RestSecurityOracle {
             //FIXME i don't think it is correct, as ignoring dynamic info?
             //TODO need tests for it
             val matching = verifiers.filter {
-                it.isResolvedParentPath(notfound)
+                DynamicPathUtils.isResolvedParentPath(it,notfound)
                         && ! notfound.auth.isDifferentFrom(it.auth)
             }
 
@@ -845,7 +843,7 @@ class RestSecurityOracle {
 
         // first check that they all refer to the same endpoint
         val conditionForEndpointEquivalence =
-            CreateResourceUtils.doesResolveToSamePath(lastAction, secondLastAction)
+            DynamicPathUtils.doesResolveToSamePath(lastAction, secondLastAction)
 
         if (!conditionForEndpointEquivalence) {
             return false

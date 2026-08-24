@@ -2,83 +2,171 @@ package org.evomaster.client.java.controller.mongo.utils;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.Objects;
 import java.util.Set;
 
 public class BsonHelper {
-    public static Object newDocument(Object document) {
+
+    private static final String APPEND_METHOD = "append";
+    private static final String GET_METHOD = "get";
+    private static final String KEY_SET_METHOD = "keySet";
+    private static final String CONTAINS_KEY_METHOD = "containsKey";
+    private static final String GET_TYPE_NAME_METHOD = "getTypeName";
+    private static final String GET_VALUE_METHOD = "getValue";
+    private static final String FIND_BY_VALUE_METHOD = "findByValue";
+    private static final String VALUE_OF_METHOD = "valueOf";
+
+    private static final String ORG_BSON_BSON_TYPE = "org.bson.BsonType";
+    private static final String ORG_BSON_DOCUMENT = "org.bson.Document";
+    public static final String NULL_TYPE = "null";
+    public static final String BSON_TYPE_NULL = "NULL";
+
+    public static Object newDocument(Object bsonDocument) {
+        Objects.requireNonNull(bsonDocument);
+        if (!isBsonDocument(bsonDocument)) {
+            throw new IllegalArgumentException("argument bsonDocument must be a BsonDocument");
+        }
         try {
-            return document.getClass().getConstructor().newInstance();
+            return bsonDocument.getClass().getConstructor().newInstance();
         } catch (InstantiationException | IllegalAccessException | InvocationTargetException |
                  NoSuchMethodException e) {
             throw new RuntimeException(e);
         }
     }
 
-    public static void appendToDocument(Object document, String fieldName, Object value) {
+    public static void appendToDocument(Object bsonDocument, String fieldName, Object value) {
+        Objects.requireNonNull(bsonDocument);
+        Objects.requireNonNull(fieldName);
+        if (!isBsonDocument(bsonDocument)) {
+            throw new IllegalArgumentException("argument bsonDocument must be a BsonDocument");
+        }
         try {
-            Method append = document.getClass().getMethod("append", String.class, Object.class);
-            append.invoke(document, fieldName, value);
+            Method append = bsonDocument.getClass().getMethod(APPEND_METHOD, String.class, Object.class);
+            append.invoke(bsonDocument, fieldName, value);
         } catch (NoSuchMethodException | IllegalAccessException | InvocationTargetException e) {
             throw new RuntimeException(e);
         }
     }
 
-    public static Object getValue(Object document, String fieldName) {
+    public static Object getValue(Object bsonDocument, String fieldName) {
+        Objects.requireNonNull(bsonDocument);
+        Objects.requireNonNull(fieldName);
+        if (!isBsonDocument(bsonDocument)) {
+            throw new IllegalArgumentException("argument bsonDocument must be a BsonDocument");
+        }
         try {
-            return document.getClass().getMethod("get", Object.class).invoke(document, fieldName);
+            return bsonDocument.getClass().getMethod(GET_METHOD, Object.class).invoke(bsonDocument, fieldName);
         } catch (IllegalAccessException | InvocationTargetException | NoSuchMethodException e) {
             throw new RuntimeException(e);
         }
     }
 
-    public static Set<String> keySet(Object document) {
+    public static Boolean documentContainsField(Object bsonDocument, String fieldName) {
+        Objects.requireNonNull(bsonDocument);
+        Objects.requireNonNull(fieldName);
+        if (!isBsonDocument(bsonDocument)) {
+            throw new IllegalArgumentException("argument bsonDocument must be a BsonDocument");
+        }
         try {
-            return (Set<String>) document.getClass().getMethod("keySet").invoke(document);
+            return (Boolean) bsonDocument.getClass().getMethod(CONTAINS_KEY_METHOD, Object.class).invoke(bsonDocument, fieldName);
         } catch (IllegalAccessException | InvocationTargetException | NoSuchMethodException e) {
             throw new RuntimeException(e);
         }
     }
 
-    public static Boolean documentContainsField(Object document, String field) {
+    public static Set<String> documentKeys(Object bsonDocument) {
+        Objects.requireNonNull(bsonDocument);
+        if (!isBsonDocument(bsonDocument)) {
+            throw new IllegalArgumentException("argument bsonDocument must be a BsonDocument");
+        }
         try {
-            return (Boolean) document.getClass().getMethod("containsKey", Object.class).invoke(document, field);
+            return (Set<String>) bsonDocument.getClass().getMethod(KEY_SET_METHOD).invoke(bsonDocument);
         } catch (IllegalAccessException | InvocationTargetException | NoSuchMethodException e) {
+            // This exception shouldn't go unnoticed.
             throw new RuntimeException(e);
         }
     }
 
-    public static Set<String> documentKeys(Object document) {
+    /**
+     * Checks if the given object represents a BSON document.
+     *
+     * @param value the object to check; should be non-null to determine if it is a BSON document
+     * @return true if the object is a BSON document, false otherwise
+     */
+    public static Boolean isBsonDocument(Object value) {
+        return value != null && value.getClass().getName().equals(ORG_BSON_DOCUMENT);
+    }
+
+    private static final String ORG_BSON_TYPES_OBJECT_ID = "org.bson.types.ObjectId";
+    private static final String ORG_BSON_BSON_TIMESTAMP = "org.bson.BsonTimestamp";
+
+    /**
+     * Determines whether the given object is a BSON ObjectId.
+     *
+     * @param obj the object to check; should be non-null to determine if it is a BSON ObjectId
+     * @return true if the object is a BSON ObjectId, false otherwise
+     */
+    public static boolean isObjectId(Object obj) {
+        return obj!=null && obj.getClass().getName().equals(ORG_BSON_TYPES_OBJECT_ID);
+    }
+
+    /**
+     * Determines whether the given object is a BSON BsonTimestamp.
+     *
+     * @param obj the object to check; should be non-null to determine if it is a BSON BsonTimestamp
+     * @return true if the object is a BSON BsonTimestamp, false otherwise
+     */
+    public static boolean isBsonTimestamp(Object obj) {
+        return obj != null && obj.getClass().getName().equals(ORG_BSON_BSON_TIMESTAMP);
+    }
+
+    /**
+     * Retrieves the value of a BSON BsonTimestamp as a long value.
+     *
+     * @param bsonTimestamp the BSON BsonTimestamp object; should be non-null
+     * @return the value of the BSON BsonTimestamp
+     * @throws IllegalArgumentException if the argument is not a BSON BsonTimestamp
+     */
+    public static long getBsonTimestampValue(Object bsonTimestamp) {
+        Objects.requireNonNull(bsonTimestamp);
+        if (!isBsonTimestamp(bsonTimestamp)) {
+            throw new IllegalArgumentException("argument bsonTimestamp must be a BsonTimestamp");
+        }
         try {
-            return (Set<String>) document.getClass().getMethod("keySet").invoke(document);
-        } catch (IllegalAccessException | InvocationTargetException | NoSuchMethodException e) {
+            return (Long) bsonTimestamp.getClass().getMethod(GET_VALUE_METHOD).invoke(bsonTimestamp);
+        } catch (NoSuchMethodException | IllegalAccessException | InvocationTargetException e) {
             throw new RuntimeException(e);
         }
     }
 
-    public static Boolean isDocument(Object value) {
-        return value.getClass().getName().equals("org.bson.Document");
-    }
 
     public static String getType(Object bsonType) {
+        Objects.requireNonNull(bsonType);
         try {
             ClassLoader bsonTypeClassLoader = bsonType.getClass().getClassLoader();
-            Class<?> bsonTypeClassMapClass = bsonTypeClassLoader.loadClass("org.bson.codecs.BsonTypeClassMap");
-            Class<?> bsonTypeClass = bsonTypeClassLoader.loadClass("org.bson.BsonType");
-            Object bsonTypeClassMap = bsonTypeClassMapClass.getDeclaredConstructor().newInstance();
-            Method get = bsonTypeClassMapClass.getMethod("get", bsonTypeClass);
-            Object type = get.invoke(bsonTypeClassMap, bsonType);
-            return (String) type.getClass().getMethod("getTypeName").invoke(type, null);
+            Class<?> bsonTypeClass = bsonTypeClassLoader.loadClass(ORG_BSON_BSON_TYPE);
+            Object bsonNullTypeInstance = Enum.valueOf(bsonTypeClass.asSubclass(Enum.class), BSON_TYPE_NULL);
+            if (bsonType.equals(bsonNullTypeInstance)) {
+                return NULL_TYPE;
+            } else {
+                Class<?> bsonTypeClassMapClass = bsonTypeClassLoader.loadClass("org.bson.codecs.BsonTypeClassMap");
+                Object bsonTypeClassMap = bsonTypeClassMapClass.getDeclaredConstructor().newInstance();
+                Method get = bsonTypeClassMapClass.getMethod(GET_METHOD, bsonTypeClass);
+                Object type = get.invoke(bsonTypeClassMap, bsonType);
+                return (String) type.getClass().getMethod(GET_TYPE_NAME_METHOD).invoke(type, null);
+            }
         } catch (ClassNotFoundException | NoSuchMethodException | InstantiationException | IllegalAccessException |
                  InvocationTargetException e) {
             throw new RuntimeException(e);
         }
+
     }
 
     public static Object getTypeFromNumber(Integer number) {
         Class<?> bsonTypeClass;
         try {
-            bsonTypeClass = Class.forName("org.bson.BsonType");
-            Method findByValue = bsonTypeClass.getMethod("findByValue", int.class);
+            bsonTypeClass = Class.forName(ORG_BSON_BSON_TYPE);
+            Method findByValue = bsonTypeClass.getMethod(FIND_BY_VALUE_METHOD, int.class);
             return findByValue.invoke(null, number);
         } catch (ClassNotFoundException | IllegalAccessException | InvocationTargetException |
                  NoSuchMethodException e) {
@@ -89,8 +177,8 @@ public class BsonHelper {
     public static Object getTypeFromAlias(String alias) {
         Class<?> bsonTypeClass;
         try {
-            bsonTypeClass = Class.forName("org.bson.BsonType");
-            Method valueOf = bsonTypeClass.getMethod("valueOf", String.class);
+            bsonTypeClass = Class.forName(ORG_BSON_BSON_TYPE);
+            Method valueOf = bsonTypeClass.getMethod(VALUE_OF_METHOD, String.class);
             return valueOf.invoke(null, alias);
         } catch (ClassNotFoundException | IllegalAccessException | InvocationTargetException |
                  NoSuchMethodException e) {
